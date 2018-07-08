@@ -1,0 +1,35 @@
+const intervalToLevels = (interval, levels) => {
+  let s = levels.scale
+      || (levels.units && Array(levels.units.length).fill().map((d,i) => 10**i))
+      || [1];
+  let u = levels.units
+      || (levels.scale && Array(levels.scale.length).fill().map((d,i) => String.fromCharCode(65 + i)))
+      || ['A'];
+
+  if (s.length !== u.length)
+    return 'ERROR: lengths of scale and units are different!';
+
+  const cbFun = (d, c) => {
+    let bb = d[1] % c[0],
+      aa = (d[1] - bb) / c[0];
+    aa = aa > 0 ? aa + c[1] : '';
+
+    return [d[0] + aa, bb];
+  };
+
+  let rslt = s.map((d, i, a) => a.slice(i).reduce((d, c) => d * c))
+    .map((d, i) => ([d, u[i]]))
+    .reduce(cbFun, ['', interval]);
+  return rslt[0];
+};
+
+let TimeLevels = {
+  scale: [365, 24, 60, 60, 1],
+  units: ['y ', 'd ', 'h ', 'm ', 's ']
+};
+let secondsToString = interval => intervalToLevels(interval, TimeLevels);
+
+TimeLevels = {
+  scale: [365, 24, 60, 60, 1]//,
+  //units: ['y ', 'd ', 'h ', 'm ', 's ']
+};

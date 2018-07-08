@@ -1,0 +1,165 @@
+== Goal of this snippet
+The original purpose is to create a function to translate second values, which is a kind of interval measurements, to a String description with levels of years, days, hours, minutes and seconds respectively.
+
+====
+*Examples*
+
+input: 80406165, output: "2y 200d 15h 2m 45s "
+
+input: 63072120, output: "2y 2m "
+====
+
+Here is my initial implementation:
+
+[source, javascript]
+----
+const secondsToString = s => {
+  const secondsOfYear = 60 * 60 * 24 * 365;
+  const secondsOfDay = 60 * 60 * 24;
+  const secondsOfHour = 60 * 60;
+  const secondsOfMinute = 60;
+
+  let y = ~~(s / secondsOfYear);
+  s %= secondsOfYear;
+  let d = ~~(s / secondsOfDay);
+  s %= secondsOfDay;
+  let h = ~~(s / secondsOfHour);
+  s %= secondsOfHour;
+  let m = ~~(s / secondsOfMinute);
+  s = s % secondsOfMinute;
+
+  y = (y > 0 ? (y + 'y ') : '');
+  d = (d > 0 ? (d + 'd ') : '');
+  h = (h > 0 ? (h + 'h ') : '');
+  m = (m > 0 ? (m + 'm ') : '');
+  s = (s > 0 ? (s + 's ') : '');
+
+  return y + d + h + m + s;
+}
+----
+
+You see, there are some *iterative/recursive* operations. In javascript, array's iteration is resolved by *map* operation, and recursion is done by *reduce* operation.
+
+[source, javascript]
+----
+var new_array = arr.map(function callback(currentValue[, index[, array]]) {
+    // Return element for new_array
+}[, thisArg])
+
+var reduction = arr.reduce(function callback(accumulator, currentValue[, currentIndex[, array]]) {
+    // Return reduction value
+}[, initialValue])
+----
+
+.Two scenarios of function reduce()
+[NOTE]
+======
+These two scenarios, with or without initialValue, have a little more difference.
+
+* If initialValue isn't provided, reduce() will execute the callback function starting at index 1, skipping the first index, and use the value of index 0 as the first accumulator.
+* If initialValue is provided, it will start at index 0, and the first accumulator is just the initialValue.
+======
+
+Fortunately our solution could use both scenarios.
+
+.Transformation from seconds to leveled time string
+[options="header"]
+|======
+|nth | acc | curVal | curIdx | array | rval
+|1st | ['', 80406165]         | [1*60*60*24*365,'y '] | 0 | array | ['2y ',17334165]
+|2nd | ['2y ',17334165]       | [1*60*60*24,'d ']     | 1 | array | ['2y 200d ',54165]
+|3rd | ['2y 200d ',54165]     | [1*60*60,'h ']        | 2 | array | ['2y 200d 15h ',165]
+|4th | ['2y 200d 15h ',165]   | [1*60,'m ']           | 3 | array | ['2y 200d 15h 2m ',45]
+|5th | ['2y 200d 15h 2m ',45] | [1,'s ']              | 4 | array | ['2y 200d 15h 2m 45s ',0]
+|======
+
+Based on analysis of table above, we could get implementation as follow:
+
+[source, javascript]
+----
+let initVal = ['', 80406165];
+let array = [[1*60*60*24*365,'y '],[1*60*60*24,'d '],[1*60*60,'h '],[1*60,'m '],[1,'s ']];
+
+let cbFun = (d, c) => {
+  let bb = d[1] % c[0],
+    aa = (d[1] - bb) / c[0];
+  aa = aa > 0 ? aa + c[1] : '';
+
+  return [d[0] + aa, bb];
+};
+
+let results = array.reduce(cbFun, initVal);
+----
+
+You see, we used the reduce() function pattern/scenario *with* initial values. Actually the variable array is a little bit redundant. We could use the reduce() function pattern *without* initial values to calculate Cumulative Product.
+
+.Calculation of Cumulative Product
+[options="header"]
+|======
+|nth | acc | curVal | curIdx | array | rval
+|1st | 365          | 24 | 1 | scales | 365*24
+|2nd | 365*24       | 60 | 2 | scales | 365*24*60
+|3rd | 365*24*60    | 60 | 3 | scales | 365*24*60*60
+|4th | 365*24*60*60 | 1  | 4 | scales | 365*24*60*60*1
+|======
+
+Obviously the array should be scale = [365,24,60,60,1]. The calculation started from index 1, and the value 365 of index 0 is used as the first accumulator. Here are full codes.
+
+[source, javascript]
+----
+let initVal = ['', 80406165];
+let scale = [365, 24, 60, 60, 1];
+let units = ['y ', 'd ', 'h ', 'm ', 's '];
+
+let cbFun = (d, c) => {
+  let bb = d[1] % c[0],
+    aa = (d[1] - bb) / c[0];
+  aa = aa > 0 ? aa + c[1] : '';
+
+  return [d[0] + aa, bb];
+};
+
+let results = scale.map((d, i, a) => a.slice(i).reduce((d, c) => d * c))
+  .map((d, i) => ([d, units[i]]))
+  .reduce(cbFun, initVal);
+----
+
+Here we used the function map() to transform original scale array to an array with cumulative product of partial elements.
+
+Actually we could generalize codes above to a function of calculating transformation of various measurement levels.
+
+[source, javascript]
+----
+const intervalToLevels = (interval, levels) => {
+  const cbFun = (d, c) => {
+    let bb = d[1] % c[0],
+      aa = (d[1] - bb) / c[0];
+    aa = aa > 0 ? aa + c[1] : '';
+
+    return [d[0] + aa, bb];
+  };
+
+  let rslt = levels.scale.map((d, i, a) => a.slice(i).reduce((d, c) => d * c))
+    .map((d, i) => ([d, levels.units[i]]))
+    .reduce(cbFun, ['', interval]);
+  return rslt[0];
+};
+
+const TimeLevels = {
+  scale: [365, 24, 60, 60, 1],
+  units: ['y ', 'd ', 'h ', 'm ', 's ']
+};
+const secondsToString = interval => intervalToLevels(interval, TimeLevels);
+
+const LengthLevels = {
+  scale: [1760, 3, 12, 1],
+  units: ['mi ', 'yd ', 'ft ', 'in ']
+};
+const inchesToString = interval => intervalToLevels(interval, LengthLevels);
+
+const LiquidsLevels = {
+  scale: [4, 2, 2, 8, 1],
+  units: ['gal ', 'qt ', 'pt ', 'cup ', 'fl_oz ']
+};
+const ouncesToString = interval => intervalToLevels(interval, LiquidsLevels);
+----
